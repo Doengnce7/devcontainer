@@ -1,6 +1,21 @@
-const baseUrl = process.env.APP_URL || "http://127.0.0.1:3000";
+const candidates = process.env.APP_URL
+  ? [process.env.APP_URL]
+  : ["http://127.0.0.1:3000", "http://web:3000"];
+
+async function pickBaseUrl() {
+  for (const baseUrl of candidates) {
+    try {
+      const response = await fetch(`${baseUrl}/api/db`);
+      if (response.ok) return baseUrl;
+    } catch {
+      // try next
+    }
+  }
+  throw new Error("No reachable app URL (tried 127.0.0.1 and web)");
+}
 
 async function main() {
+  const baseUrl = await pickBaseUrl();
   const response = await fetch(`${baseUrl}/api/db`);
   if (!response.ok) throw new Error(`GET /api/db failed: ${response.status}`);
   const data = await response.json();

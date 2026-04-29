@@ -13,7 +13,46 @@ services:
     working_dir: /workspaces/devcontainer
     environment:
       DOCKER_TLS_CERTDIR: ""
+    ports:
+      - "13000:3000"
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: node:22-bookworm
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://app:app@db:5432/app
+      CHOKIDAR_USEPOLLING: "1"
+      WATCHPACK_POLLING: "true"
+      UV_USE_IO_URING: "0"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - web-app:/app
+      - npm-cache:/root/.npm
+    command: ["sh", "-lc", "cp -a /workspaces/devcontainer/. /app/ && cd /app && npm install && npm run db:deploy && npm run dev -- -H 0.0.0.0 -p 3000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes_from:
+      - workspace
 
 volumes:
   dind-data:
   npm-cache:
+  postgres-data:
+  web-app:

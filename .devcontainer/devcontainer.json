@@ -3,7 +3,9 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "workspace",
   "runServices": [
-    "workspace"
+    "workspace",
+    "db",
+    "web"
   ],
   "workspaceFolder": "/workspaces/devcontainer",
   "containerEnv": {
@@ -12,11 +14,11 @@
   },
   "shutdownAction": "stopCompose",
   "forwardPorts": [
-    3000,
+    13000,
     5432
   ],
   "portsAttributes": {
-    "3000": {
+    "13000": {
       "label": "Next.js",
       "onAutoForward": "notify"
     },
@@ -25,8 +27,8 @@
       "onAutoForward": "silent"
     }
   },
-  "postCreateCommand": "/bin/sh -lc 'docker --version && until docker info >/dev/null 2>&1; do sleep 1; done; docker compose -f compose.app.yml up -d --remove-orphans'",
-  "postStartCommand": "/bin/sh -lc 'until docker info >/dev/null 2>&1; do sleep 1; done; docker compose -f compose.app.yml up -d --remove-orphans'",
+  "postCreateCommand": "/bin/sh -lc 'for i in $(seq 1 120); do curl -sS -m 2 http://web:3000/api/db >/dev/null 2>&1 && break; sleep 2; done; if [ ! -f /tmp/web-proxy.pid ] || ! kill -0 $(cat /tmp/web-proxy.pid) 2>/dev/null; then nohup socat TCP-LISTEN:3000,fork,reuseaddr TCP:web:3000 >/tmp/web-proxy.log 2>&1 & echo $! >/tmp/web-proxy.pid; fi; printf \"=== Workspace Self-test (status) ===\\n\"; APP_URL=http://web:3000 npm run status:cli; printf \"=== Workspace API Flow Test ===\\n\"; APP_URL=http://web:3000 npm run test:cli; printf \"=== Workspace Self-test (final) ===\\n\"; APP_URL=http://web:3000 npm run status:cli'",
+  "postStartCommand": "/bin/sh -lc 'for i in $(seq 1 120); do curl -sS -m 2 http://web:3000/api/db >/dev/null 2>&1 && break; sleep 2; done; if [ ! -f /tmp/web-proxy.pid ] || ! kill -0 $(cat /tmp/web-proxy.pid) 2>/dev/null; then nohup socat TCP-LISTEN:3000,fork,reuseaddr TCP:web:3000 >/tmp/web-proxy.log 2>&1 & echo $! >/tmp/web-proxy.pid; fi; printf \"=== Workspace Self-test (status) ===\\n\"; APP_URL=http://web:3000 npm run status:cli; printf \"=== Workspace API Flow Test ===\\n\"; APP_URL=http://web:3000 npm run test:cli; printf \"=== Workspace Self-test (final) ===\\n\"; APP_URL=http://web:3000 npm run status:cli'",
   "customizations": {
     "vscode": {
       "extensions": [
