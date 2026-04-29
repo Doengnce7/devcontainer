@@ -1,0 +1,38 @@
+{
+  "name": "coder-next-dind",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "runServices": [
+    "workspace"
+  ],
+  "workspaceFolder": "/workspaces/devcontainer",
+  "containerEnv": {
+    "DATABASE_URL": "postgresql://app:app@127.0.0.1:5432/app",
+    "COMPOSE_BAKE": "false"
+  },
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [
+    3000,
+    5432
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "Postgres",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "/bin/sh -lc 'docker --version && until docker info >/dev/null 2>&1; do sleep 1; done; docker compose -f compose.app.yml up -d --remove-orphans'",
+  "postStartCommand": "/bin/sh -lc 'until docker info >/dev/null 2>&1; do sleep 1; done; docker compose -f compose.app.yml up -d --remove-orphans'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

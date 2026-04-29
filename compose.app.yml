@@ -1,0 +1,266 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  web:
+    image: node:22-bookworm
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://app:app@db:5432/app
+      CHOKIDAR_USEPOLLING: "1"
+      WATCHPACK_POLLING: "true"
+      UV_USE_IO_URING: "0"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - web-app:/app
+      - npm-cache:/root/.npm
+    command: |
+      sh -lc '
+        set -e
+
+        if [ ! -f /app/.bootstrapped ]; then
+          apt-get update -y
+          apt-get install -y --no-install-recommends openssl ca-certificates
+          rm -rf /var/lib/apt/lists/*
+
+          mkdir -p /app/prisma/migrations/20260427000000_init /app/lib /app/app/api/db
+
+          printf "%s\n" \
+            "{" \
+            "  \"name\": \"coder-next-dind\"," \
+            "  \"version\": \"0.1.0\"," \
+            "  \"private\": true," \
+            "  \"scripts\": {" \
+            "    \"dev\": \"next dev\"," \
+            "    \"build\": \"next build\"," \
+            "    \"start\": \"next start\"" \
+            "  }," \
+            "  \"dependencies\": {" \
+            "    \"next\": \"14.2.5\"," \
+            "    \"react\": \"18.3.1\"," \
+            "    \"react-dom\": \"18.3.1\"," \
+            "    \"@prisma/client\": \"5.17.0\"" \
+            "  }," \
+            "  \"devDependencies\": {" \
+            "    \"prisma\": \"5.17.0\"" \
+            "  }" \
+            "}" > /app/package.json
+
+          printf "%s\n" \
+            "const nextConfig = {" \
+            "  output: \"standalone\"" \
+            "};" \
+            "" \
+            "export default nextConfig;" > /app/next.config.mjs
+
+          printf "%s\n" \
+            "export const metadata = {" \
+            "  title: \"Coder Next Devcontainer\"," \
+            "  description: \"Next.js + Postgres + Docker-in-Docker\"" \
+            "};" \
+            "" \
+            "export default function RootLayout({ children }) {" \
+            "  return (" \
+            "    <html lang=\"en\">" \
+            "      <body style={{ fontFamily: \"Arial, sans-serif\", margin: 24 }}>{children}</body>" \
+            "    </html>" \
+            "  );" \
+            "}" > /app/app/layout.jsx
+
+          printf "%s\n" \
+            "\"use client\";" \
+            "" \
+            "import { useEffect, useState } from \"react\";" \
+            "" \
+            "export default function Home() {" \
+            "  const [notes, setNotes] = useState([]);" \
+            "  const [dbStatus, setDbStatus] = useState(\"CHECKING\");" \
+            "  const [loading, setLoading] = useState(false);" \
+            "  const [error, setError] = useState(\"\");" \
+            "" \
+            "  async function loadNotes() {" \
+            "    try {" \
+            "      setError(\"\");" \
+            "      const response = await fetch(\"/api/db\", { cache: \"no-store\" });" \
+            "      const data = await response.json();" \
+            "      setNotes(Array.isArray(data.notes) ? data.notes : []);" \
+            "      setDbStatus(\"PASS\");" \
+            "    } catch (err) {" \
+            "      setDbStatus(\"FAIL\");" \
+            "      setError(err instanceof Error ? err.message : \"Unknown error\");" \
+            "    }" \
+            "  }" \
+            "" \
+            "  useEffect(() => {" \
+            "    loadNotes();" \
+            "  }, []);" \
+            "" \
+            "  async function createNote() {" \
+            "    setLoading(true);" \
+            "    try {" \
+            "      const message = \"test-\" + new Date().toISOString();" \
+            "      await fetch(\"/api/db\", {" \
+            "        method: \"POST\"," \
+            "        headers: { \"content-type\": \"application/json\" }," \
+            "        body: JSON.stringify({ message })" \
+            "      });" \
+            "      await loadNotes();" \
+            "    } finally {" \
+            "      setLoading(false);" \
+            "    }" \
+            "  }" \
+            "" \
+            "  async function clearNotes() {" \
+            "    setLoading(true);" \
+            "    try {" \
+            "      await fetch(\"/api/db\", { method: \"DELETE\" });" \
+            "      await loadNotes();" \
+            "    } finally {" \
+            "      setLoading(false);" \
+            "    }" \
+            "  }" \
+            "" \
+            "  return (" \
+            "    <main>" \
+            "      <h1>Coder Devcontainer Ready</h1>" \
+            "      <p>Next.js runs in the web container on port 3000.</p>" \
+            "      <p>Postgres runs in the db container on port 5432.</p>" \
+            "      <p>Docker-in-Docker is enabled in the workspace service.</p>" \
+            "      <p>DB check endpoint: /api/db</p>" \
+            "      <h2>Self-test</h2>" \
+            "      <p>Database connection: {dbStatus}</p>" \
+            "      <p>Current note count: {notes.length}</p>" \
+            "      <p>API methods ready: GET, POST, DELETE</p>" \
+            "      <div style={{ display: \"flex\", gap: 8, marginBottom: 12 }}>" \
+            "        <button type=\"button\" onClick={createNote} disabled={loading}>Add Test Note</button>" \
+            "        <button type=\"button\" onClick={clearNotes} disabled={loading}>Clear All Notes</button>" \
+            "        <button type=\"button\" onClick={loadNotes} disabled={loading}>Refresh</button>" \
+            "      </div>" \
+            "      {error ? <p>Last error: {error}</p> : null}" \
+            "      <table border=\"1\" cellPadding=\"6\" style={{ borderCollapse: \"collapse\" }}>" \
+            "        <thead>" \
+            "          <tr><th>ID</th><th>Message</th><th>Created At</th></tr>" \
+            "        </thead>" \
+            "        <tbody>" \
+            "          {notes.length === 0 ? (" \
+            "            <tr><td colSpan=\"3\">No rows</td></tr>" \
+            "          ) : (" \
+            "            notes.map((note) => (" \
+            "              <tr key={note.id}>" \
+            "                <td>{note.id}</td><td>{note.message}</td><td>{new Date(note.createdAt).toLocaleString()}</td>" \
+            "              </tr>" \
+            "            ))" \
+            "          )}" \
+            "        </tbody>" \
+            "      </table>" \
+            "    </main>" \
+            "  );" \
+            "}" > /app/app/page.jsx
+
+          printf "%s\n" \
+            "generator client {" \
+            "  provider = \"prisma-client-js\"" \
+            "}" \
+            "" \
+            "datasource db {" \
+            "  provider = \"postgresql\"" \
+            "  url      = env(\"DATABASE_URL\")" \
+            "}" \
+            "" \
+            "model Note {" \
+            "  id        Int      @id @default(autoincrement())" \
+            "  message   String" \
+            "  createdAt DateTime @default(now())" \
+            "}" > /app/prisma/schema.prisma
+
+          printf "%s\n" \
+            "CREATE TABLE \"Note\" (" \
+            "  \"id\" SERIAL NOT NULL," \
+            "  \"message\" TEXT NOT NULL," \
+            "  \"createdAt\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP," \
+            "  CONSTRAINT \"Note_pkey\" PRIMARY KEY (\"id\")" \
+            ");" > /app/prisma/migrations/20260427000000_init/migration.sql
+
+          printf "%s\n" "provider = \"postgresql\"" > /app/prisma/migrations/migration_lock.toml
+
+          printf "%s\n" \
+            "import { PrismaClient } from \"@prisma/client\";" \
+            "" \
+            "const globalForPrisma = globalThis;" \
+            "export const prisma = globalForPrisma.prisma || new PrismaClient();" \
+            "if (process.env.NODE_ENV !== \"production\") globalForPrisma.prisma = prisma;" > /app/lib/prisma.js
+
+          printf "%s\n" \
+            "import { prisma } from \"../../../lib/prisma\";" \
+            "" \
+            "export async function GET() {" \
+            "  const notes = await prisma.note.findMany({" \
+            "    orderBy: { createdAt: \"desc\" }" \
+            "  });" \
+            "  return Response.json({ ok: true, count: notes.length, notes });" \
+            "}" \
+            "" \
+            "export async function POST(request) {" \
+            "  let payload;" \
+            "" \
+            "  try {" \
+            "    payload = await request.json();" \
+            "  } catch {" \
+            "    return Response.json({ ok: false, error: \"Invalid JSON body\" }, { status: 400 });" \
+            "  }" \
+            "" \
+            "  const message = typeof payload?.message === \"string\" ? payload.message.trim() : \"\";" \
+            "" \
+            "  if (!message) {" \
+            "    return Response.json({ ok: false, error: \"message is required\" }, { status: 400 });" \
+            "  }" \
+            "" \
+            "  const note = await prisma.note.create({" \
+            "    data: { message }" \
+            "  });" \
+            "" \
+            "  return Response.json({ ok: true, note }, { status: 201 });" \
+            "}" \
+            "" \
+            "export async function DELETE() {" \
+            "  const result = await prisma.note.deleteMany({});" \
+            "  return Response.json({ ok: true, deleted: result.count });" \
+            "}" > /app/app/api/db/route.js
+
+          cd /app
+          npm install
+
+          touch /app/.bootstrapped
+        fi
+
+        cd /app
+        npx prisma generate
+        npx prisma migrate deploy
+        npm run dev -- -H 0.0.0.0 -p 3000
+      '
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
+  web-app:
+  npm-cache:

@@ -1,0 +1,19 @@
+services:
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile.workspace
+    privileged: true
+    init: true
+    command: ["dockerd-entrypoint.sh"]
+    volumes:
+      - ..:/workspaces/devcontainer
+      - dind-data:/var/lib/docker
+      - npm-cache:/root/.npm
+    working_dir: /workspaces/devcontainer
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+
+volumes:
+  dind-data:
+  npm-cache:
